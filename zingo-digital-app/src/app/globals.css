@@ -1,0 +1,24 @@
+/* Design tokens ported 1:1 from the static prototype (index.html etc.)
+   so the visual identity carries over exactly. Also referenced by
+   tailwind.config.ts theme.extend below. */
+:root {
+  --ink: #101109;
+  --paper: #FBFBF6;
+  --lime: #D7FF3A;
+  --lime-dim: #AEDA1E;
+  --lime-deep: #8FB800;
+  --charcoal: #1B1C15;
+  --charcoal-soft: #24261C;
+  --grey: #6E7062;
+  --line: #DEE0D0;
+  --mint: #F4FFDE;
+}
+
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Logical properties used throughout components (ms-/me-/ps-/pe-) instead of
+   ml-/mr- so layout mirrors correctly for the Arabic (rtl) locale without a
+   separate stylesheet. See ARCHITECTURE.md §10. */

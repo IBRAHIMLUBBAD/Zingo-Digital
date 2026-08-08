@@ -1,0 +1,15 @@
+{
+  "nav": {
+    "services": "Services",
+    "howItWorks": "How it works",
+    "about": "About",
+    "contact": "Contact",
+    "login": "Log in",
+    "startOrder": "Start an order"
+  },
+  "home": {
+    "eyebrow": "Digital services platform",
+    "title": "Digital services, assembled to order.",
+    "lead": "Pick a service, tell us what you need, upload your files and pay — Zingo tracks the order, sends updates and hands you a finished result with an invoice attached."
+  }
+}

@@ -1,0 +1,292 @@
+// Zingo Digital — Phase 1 schema
+// Mirrors the ERD in ARCHITECTURE.md §2. Pending approval before first migration is run.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  admin
+  manager
+  staff
+}
+
+enum OrderStatus {
+  new
+  awaiting_payment
+  paid
+  under_review
+  in_progress
+  waiting_for_customer
+  completed
+  delivered
+  closed
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum FileKind {
+  source
+  deliverable
+}
+
+enum MessageVisibility {
+  customer
+  internal
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  phone         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  adminProfile AdminUser?
+  orders       Order[]
+  discounts    Discount[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model AdminUser {
+  id     String    @id @default(uuid())
+  userId String    @unique @map("user_id")
+  role   AdminRole
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("admin_users")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      Json     // { "en": "...", "ar": "..." }
+  slug      String   @unique
+  sortOrder Int      @default(0) @map("sort_order")
+
+  services Service[]
+
+  @@map("categories")
+}
+
+model Service {
+  id                String   @id @default(uuid())
+  categoryId        String   @map("category_id")
+  name              Json     // { "en": "...", "ar": "..." }
+  slug              String   @unique
+  description       Json     // { "en": "...", "ar": "..." }
+  basePrice         Decimal  @map("base_price")
+  currency          String   @default("USD")
+  deliveryTimeDays  Int      @map("delivery_time_days")
+  active            Boolean  @default(true)
+  requirements      Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  category    Category       @relation(fields: [categoryId], references: [id])
+  fields      ServiceField[]
+  orderItems  OrderItem[]
+
+  @@map("services")
+}
+
+model ServiceField {
+  id         String  @id @default(uuid())
+  serviceId  String  @map("service_id")
+  key        String
+  label      Json    // { "en": "...", "ar": "..." }
+  type       String  // text|textarea|number|date|select|checkbox|radio|url|email|phone|file
+  options    Json?
+  required   Boolean @default(false)
+  validation Json?
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@map("service_fields")
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  orderNumber    String      @unique @map("order_number")
+  userId         String      @map("user_id")
+  status         OrderStatus @default(new)
+  subtotal       Decimal
+  discountTotal  Decimal     @default(0) @map("discount_total")
+  feeTotal       Decimal     @default(0) @map("fee_total")
+  total          Decimal
+  currency       String      @default("USD")
+  couponId       String?     @map("coupon_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  user          User                 @relation(fields: [userId], references: [id])
+  coupon        Coupon?              @relation(fields: [couponId], references: [id])
+  items         OrderItem[]
+  files         OrderFile[]
+  messages      OrderMessage[]
+  statusHistory OrderStatusHistory[]
+  payment       Payment?
+  invoice       Invoice?
+
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String  @map("order_id")
+  serviceId   String  @map("service_id")
+  fieldValues Json    @map("field_values")
+  price       Decimal
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderFile {
+  id          String   @id @default(uuid())
+  orderId     String   @map("order_id")
+  uploadedBy  String   @map("uploaded_by")
+  kind        FileKind
+  storageKey  String   @map("storage_key")
+  filename    String
+  mimeType    String   @map("mime_type")
+  sizeBytes   BigInt   @map("size_bytes")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("order_files")
+}
+
+model OrderMessage {
+  id         String            @id @default(uuid())
+  orderId    String            @map("order_id")
+  authorId   String            @map("author_id")
+  visibility MessageVisibility
+  body       String
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("order_messages")
+}
+
+model OrderStatusHistory {
+  id         String      @id @default(uuid())
+  orderId    String      @map("order_id")
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+  changedBy  String       @map("changed_by")
+  changedAt  DateTime     @default(now()) @map("changed_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("order_status_history")
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  orderId     String        @unique @map("order_id")
+  status      PaymentStatus @default(pending)
+  provider    String
+  providerRef String        @unique @map("provider_ref")
+  amount      Decimal
+  currency    String        @default("USD")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+model Invoice {
+  id             String   @id @default(uuid())
+  orderId        String   @unique @map("order_id")
+  invoiceNumber  String   @unique @map("invoice_number")
+  pdfStorageKey  String   @map("pdf_storage_key")
+  total          Decimal
+  currency       String   @default("USD")
+  issuedAt       DateTime @default(now()) @map("issued_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("invoices")
+}
+
+model Discount {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  type        String   // percent|fixed|first_order|loyalty
+  value       Decimal
+  validFrom   DateTime? @map("valid_from")
+  validUntil  DateTime? @map("valid_until")
+  active      Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("discounts")
+}
+
+model Coupon {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  type        String    // percent|fixed
+  value       Decimal
+  usageLimit  Int?      @map("usage_limit")
+  usageCount  Int       @default(0) @map("usage_count")
+  validFrom   DateTime? @map("valid_from")
+  validUntil  DateTime? @map("valid_until")
+  active      Boolean   @default(true)
+
+  orders Order[]
+
+  @@map("coupons")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2+ (planned, not migrated yet): digital_profiles, digital_links,
+// nfc_cards, qr_codes, subscriptions, web_projects, websites, analytics_events.
+// See ARCHITECTURE.md §11 for the compatibility plan.
+// ---------------------------------------------------------------------------
